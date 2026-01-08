@@ -1,0 +1,30 @@
+Role: You are an expert Full-Stack Web Developer and Systems Architect.
+Task: Build a fully functional, dynamic e-commerce platform (codename: "GlobalShop") inspired by Temu, featuring a sophisticated order delivery and real-time shipment tracking system.
+1. Core Architecture & Tech Stack
+• Frontend: React.js or Next.js (for SEO and speed) using Tailwind CSS for a modern, mobile-responsive UI.
+• Backend: Node.js with Express or Python with FastAPI.
+• Database: PostgreSQL (Relational data for orders/users) + Redis (for tracking cache).
+• Authentication: JWT-based auth with roles for Customer, Vendor, and Admin.
+2. Key Feature Requirements
+• Product Engine: Dynamic product listings with categories, flash sales, and "Recommended for You" algorithms.
+• Checkout System: Integrated shopping cart with a multi-step checkout flow (Shipping -> Payment -> Confirmation).
+• Shipment Tracking System (The Core):
+• Generate a unique Tracking ID (e.g., GS-123-ABC) upon order fulfillment.
+• Tracking Dashboard: A public or user-specific page where entering the ID displays a vertical timeline of status updates.
+• Status States: Order Placed -> Processing -> Shipped -> In Transit -> Out for Delivery -> Delivered.
+• Location History: A database table to log timestamps, city locations, and status descriptions for each movement of the parcel.
+3. Database Schema Needs
+• Users Table: ID, name, email, saved addresses.
+• Products Table: ID, vendor_id, price, stock, images.
+• Orders Table: ID, user_id, total_amount, payment_status.
+• Shipments Table: ID, order_id, tracking_number, carrier_info, current_status.
+• Tracking_Logs Table: shipment_id, status, location, timestamp.
+4. Interactive Components
+• Dynamic Progress Bar: A visual stepper component on the tracking page that fills based on the shipment's current stage.
+• Mock Map Integration: Use a placeholder or Leaflet.js to visualize the "current route" based on location history data.
+5. Development Instructions
+• Phase 1: Build the UI for the marketplace and product details.
+• Phase 2: Implement the cart logic and the "Place Order" backend trigger.
+• Phase 3: Create the "Logistics Portal" for Admins to manually update parcel locations and statuses.
+• Phase 4: Develop the "Public Tracking Search" feature where any user can input a Tracking ID to see the history.
+Deliverables: Provide the complete folder structure, backend API routes, frontend components, and a database migration script.
