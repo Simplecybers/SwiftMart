@@ -73,7 +73,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       note: "Order has been placed and is being processed.",
     });
 
-    res.status(201).json(order);
+    res.status(201).json({ ...order, trackingNumber });
   });
 
   app.get(api.orders.list.path, async (req, res) => {
