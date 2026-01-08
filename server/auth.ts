@@ -1,4 +1,5 @@
 import { Express } from "express";
+import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
@@ -33,7 +34,7 @@ export function setupAuth(app: Express) {
     app.set("trust proxy", 1);
   }
 
-  app.use(require("express-session")(sessionSettings));
+  app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
 
