@@ -21,7 +21,7 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
 
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
-  getOrders(userId: number): Promise<(Order & { items: OrderItem[] })[]>;
+  getOrders(userId: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment })[]>;
   getOrder(id: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment }) | undefined>;
 
   createShipment(shipment: InsertShipment): Promise<Shipment>;
@@ -89,13 +89,14 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getOrders(userId: number): Promise<(Order & { items: OrderItem[] })[]> {
+  async getOrders(userId: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment })[]> {
     const userOrders = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
     
-    // Fetch items for each order (could be optimized with join, but keeping simple for MVP)
+    // Fetch items and shipment for each order
     const results = await Promise.all(userOrders.map(async (order) => {
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
-      return { ...order, items };
+      const [shipment] = await db.select().from(shipments).where(eq(shipments.orderId, order.id));
+      return { ...order, items, shipment };
     }));
 
     return results;
