@@ -33,7 +33,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     const user = req.user as any;
     
-    const { items } = req.body;
+    const { items, paymentMethod, paymentDetails } = req.body;
     let totalAmount = 0;
     const orderItemsData = [];
 
@@ -55,6 +55,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       userId: user.id,
       totalAmount: totalAmount.toFixed(2),
       status: "pending",
+      paymentMethod,
+      paymentDetails: typeof paymentDetails === 'string' ? paymentDetails : JSON.stringify(paymentDetails),
     }, orderItemsData);
 
     // Auto-create shipment for demo purposes

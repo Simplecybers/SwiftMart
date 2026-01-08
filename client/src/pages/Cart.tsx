@@ -4,9 +4,14 @@ import { useUser } from "@/hooks/use-auth";
 import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Trash2, Plus, Minus, ArrowRight, ShoppingBag } from "lucide-react";
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, CreditCard, Bitcoin, Gift, Loader2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Cart() {
   const { items, removeItem, updateQuantity, clearCart } = useCart();
@@ -18,6 +23,9 @@ export default function Cart() {
   const subtotal = items.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
   const tax = subtotal * 0.08;
   const total = subtotal + tax;
+
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "crypto" | "gift_card">("card");
+  const [paymentDetails, setPaymentDetails] = useState<any>({});
 
   const handleCheckout = () => {
     if (!user) {
@@ -31,7 +39,11 @@ export default function Cart() {
     }
 
     createOrder(
-      { items: items.map(i => ({ productId: i.id, quantity: i.quantity })) },
+      { 
+        items: items.map(i => ({ productId: i.id, quantity: i.quantity })),
+        paymentMethod,
+        paymentDetails
+      },
       {
         onSuccess: () => {
           clearCart();
@@ -143,9 +155,64 @@ export default function Cart() {
                     <span className="font-medium">${tax.toFixed(2)}</span>
                   </div>
                   <div className="h-px bg-border" />
-                  <div className="flex justify-between text-lg font-bold">
+                  <div className="flex justify-between text-lg font-bold mb-6">
                     <span>Total</span>
                     <span className="text-primary">${total.toFixed(2)}</span>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t mb-6">
+                    <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Payment Method</h3>
+                    <RadioGroup
+                      value={paymentMethod}
+                      onValueChange={(val: "card" | "crypto" | "gift_card") => setPaymentMethod(val)}
+                      className="grid grid-cols-1 gap-3"
+                    >
+                      <div className="flex items-center space-x-2 border p-3 rounded-xl cursor-pointer hover:bg-accent transition-colors">
+                        <RadioGroupItem value="card" id="card" />
+                        <Label htmlFor="card" className="flex items-center gap-2 cursor-pointer w-full font-medium">
+                          <CreditCard className="h-4 w-4 text-primary" /> Credit Card
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2 border p-3 rounded-xl cursor-pointer hover:bg-accent transition-colors">
+                        <RadioGroupItem value="crypto" id="crypto" />
+                        <Label htmlFor="crypto" className="flex items-center gap-2 cursor-pointer w-full font-medium">
+                          <Bitcoin className="h-4 w-4 text-primary" /> Cryptocurrency
+                        </Label>
+                      </div>
+                      <div className="flex items-center space-x-2 border p-3 rounded-xl cursor-pointer hover:bg-accent transition-colors">
+                        <RadioGroupItem value="gift_card" id="gift_card" />
+                        <Label htmlFor="gift_card" className="flex items-center gap-2 cursor-pointer w-full font-medium">
+                          <Gift className="h-4 w-4 text-primary" /> Gift Card
+                        </Label>
+                      </div>
+                    </RadioGroup>
+
+                    {paymentMethod === "crypto" && (
+                      <div className="p-4 bg-secondary/50 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <Label className="text-xs font-bold uppercase">Select Currency</Label>
+                        <Select onValueChange={(val) => setPaymentDetails({ ...paymentDetails, currency: val })}>
+                          <SelectTrigger className="bg-background">
+                            <SelectValue placeholder="Choose crypto..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="btc">Bitcoin (BTC)</SelectItem>
+                            <SelectItem value="eth">Ethereum (ETH)</SelectItem>
+                            <SelectItem value="usdt">Tether (USDT)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {paymentMethod === "gift_card" && (
+                      <div className="p-4 bg-secondary/50 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <Label className="text-xs font-bold uppercase">Gift Card Code</Label>
+                        <Input 
+                          className="bg-background"
+                          placeholder="Enter 16-digit code..." 
+                          onChange={(e) => setPaymentDetails({ ...paymentDetails, code: e.target.value })}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Button 
@@ -154,10 +221,13 @@ export default function Cart() {
                   disabled={isPending}
                 >
                   {isPending ? (
-                    "Processing..."
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Processing...
+                    </>
                   ) : (
                     <>
-                      Checkout <ArrowRight className="ml-2 h-5 w-5" />
+                      Place Order <ArrowRight className="ml-2 h-5 w-5" />
                     </>
                   )}
                 </Button>
