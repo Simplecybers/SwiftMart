@@ -36,7 +36,7 @@ export default function Tracking() {
             <h1 className="text-3xl font-display font-bold">Track Your Order</h1>
             <form onSubmit={handleSearch} className="flex gap-2 max-w-md mx-auto">
               <Input
-                placeholder="Enter Tracking ID (e.g. TRK...)"
+                placeholder="Enter Tracking ID (e.g. GS-1234-5678)"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="h-12 text-lg"
