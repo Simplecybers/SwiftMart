@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import ProductDetail from "@/pages/ProductDetail";
 import Cart from "@/pages/Cart";
+import Orders from "@/pages/Orders";
 import Tracking from "@/pages/Tracking";
 import Auth from "@/pages/Auth";
 import Admin from "@/pages/Admin";
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/products/:id" component={ProductDetail} />
       <Route path="/cart" component={Cart} />
+      <Route path="/orders" component={Orders} />
       <Route path="/track" component={Tracking} />
       <Route path="/track/:trackingNumber" component={Tracking} />
       <Route path="/auth" component={Auth} />
