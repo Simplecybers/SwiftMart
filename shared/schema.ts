@@ -6,6 +6,7 @@ import { relations } from "drizzle-orm";
 export const roleEnum = pgEnum("role", ["customer", "vendor", "admin"]);
 export const orderStatusEnum = pgEnum("order_status", ["pending", "paid", "shipped", "completed", "cancelled"]);
 export const shipmentStatusEnum = pgEnum("shipment_status", ["order_placed", "processing", "shipped", "in_transit", "out_for_delivery", "delivered"]);
+export const paymentMethodEnum = pgEnum("payment_method", ["card", "crypto", "gift_card"]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -31,6 +32,18 @@ export const orders = pgTable("orders", {
   userId: integer("user_id").notNull(), // References users.id
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: text("status", { enum: ["pending", "paid", "shipped", "completed", "cancelled"] }).default("pending").notNull(),
+  paymentMethod: text("payment_method", { enum: ["card", "crypto", "gift_card"] }),
+  paymentDetails: text("payment_details"), // JSON or transaction hash
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(), // Assigned to
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  status: text("status", { enum: ["todo", "in_progress", "completed"] }).default("todo").notNull(),
+  priority: text("priority", { enum: ["low", "medium", "high"] }).default("medium").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -64,6 +77,14 @@ export const trackingLogs = pgTable("tracking_logs", {
 export const usersRelations = relations(users, ({ many }) => ({
   orders: many(orders),
   products: many(products),
+  tasks: many(tasks),
+}));
+
+export const tasksRelations = relations(tasks, ({ one }) => ({
+  user: one(users, {
+    fields: [tasks.userId],
+    references: [users.id],
+  }),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
@@ -118,6 +139,7 @@ export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, cre
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export const insertShipmentSchema = createInsertSchema(shipments).omit({ id: true });
 export const insertTrackingLogSchema = createInsertSchema(trackingLogs).omit({ id: true, timestamp: true });
+export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -129,3 +151,5 @@ export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type Shipment = typeof shipments.$inferSelect;
 export type TrackingLog = typeof trackingLogs.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = z.infer<typeof insertTaskSchema>;

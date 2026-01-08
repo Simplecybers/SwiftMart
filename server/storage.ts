@@ -23,10 +23,16 @@ export interface IStorage {
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   getOrders(userId: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment })[]>;
   getOrder(id: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment }) | undefined>;
+  updateOrderStatus(orderId: number, status: string): Promise<Order>;
 
   createShipment(shipment: InsertShipment): Promise<Shipment>;
   getShipmentByTracking(trackingNumber: string): Promise<(Shipment & { logs: TrackingLog[] }) | undefined>;
   addTrackingLog(log: InsertTrackingLog): Promise<TrackingLog>;
+
+  getTasks(userId: number): Promise<Task[]>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(taskId: number, task: Partial<InsertTask>): Promise<Task>;
+  getAllTasks(): Promise<Task[]>;
 
   sessionStore: session.Store;
 }
@@ -58,7 +64,6 @@ export class DatabaseStorage implements IStorage {
 
   async getProducts(category?: string, search?: string): Promise<Product[]> {
     let query = db.select().from(products);
-    // Note: Simple filtering for MVP. For search, we might want ILIKE
     if (category) {
       query = query.where(eq(products.category, category)) as any;
     }
@@ -92,7 +97,6 @@ export class DatabaseStorage implements IStorage {
   async getOrders(userId: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment })[]> {
     const userOrders = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
     
-    // Fetch items and shipment for each order
     const results = await Promise.all(userOrders.map(async (order) => {
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
       const [shipment] = await db.select().from(shipments).where(eq(shipments.orderId, order.id));
@@ -112,6 +116,11 @@ export class DatabaseStorage implements IStorage {
     return { ...order, items, shipment };
   }
 
+  async updateOrderStatus(orderId: number, status: string): Promise<Order> {
+    const [updated] = await db.update(orders).set({ status }).where(eq(orders.id, orderId)).returning();
+    return updated;
+  }
+
   async createShipment(shipment: InsertShipment): Promise<Shipment> {
     const [newShipment] = await db.insert(shipments).values(shipment).returning();
     return newShipment;
@@ -128,11 +137,28 @@ export class DatabaseStorage implements IStorage {
 
   async addTrackingLog(log: InsertTrackingLog): Promise<TrackingLog> {
     const [newLog] = await db.insert(trackingLogs).values(log).returning();
-    // Update shipment status as well
     await db.update(shipments)
       .set({ status: log.status })
       .where(eq(shipments.id, log.shipmentId));
     return newLog;
+  }
+
+  async getTasks(userId: number): Promise<Task[]> {
+    return await db.select().from(tasks).where(eq(tasks.userId, userId)).orderBy(desc(tasks.createdAt));
+  }
+
+  async getAllTasks(): Promise<Task[]> {
+    return await db.select().from(tasks).orderBy(desc(tasks.createdAt));
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    const [newTask] = await db.insert(tasks).values(task).returning();
+    return newTask;
+  }
+
+  async updateTask(taskId: number, task: Partial<InsertTask>): Promise<Task> {
+    const [updated] = await db.update(tasks).set(task).where(eq(tasks.id, taskId)).returning();
+    return updated;
   }
 }
 
