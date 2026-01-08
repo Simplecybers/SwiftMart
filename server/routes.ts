@@ -92,6 +92,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(order);
   });
 
+  app.patch("/api/orders/:id/status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    const user = req.user as any;
+    if (user.role !== "admin") return res.status(403).send("Forbidden");
+    
+    const order = await storage.updateOrderStatus(Number(req.params.id), req.body.status);
+    res.json(order);
+  });
+
   // Tracking
   app.get(api.tracking.get.path, async (req, res) => {
     const shipment = await storage.getShipmentByTracking(req.params.trackingNumber);
