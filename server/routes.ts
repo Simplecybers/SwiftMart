@@ -54,7 +54,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.createOrder({
       userId: user.id,
       totalAmount: totalAmount.toFixed(2),
-      status: "pending",
+      status: paymentMethod === 'card' ? "pending" : "awaiting_confirmation",
       paymentMethod,
       paymentDetails: typeof paymentDetails === 'string' ? paymentDetails : JSON.stringify(paymentDetails),
     }, orderItemsData);

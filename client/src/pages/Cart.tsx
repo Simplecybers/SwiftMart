@@ -189,7 +189,7 @@ export default function Cart() {
 
                     {paymentMethod === "crypto" && (
                       <div className="p-4 bg-secondary/50 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <Label className="text-xs font-bold uppercase">Select Currency</Label>
+                        <Label className="text-xs font-bold uppercase">Crypto Details</Label>
                         <Select onValueChange={(val) => setPaymentDetails({ ...paymentDetails, currency: val })}>
                           <SelectTrigger className="bg-background">
                             <SelectValue placeholder="Choose crypto..." />
@@ -200,17 +200,63 @@ export default function Cart() {
                             <SelectItem value="usdt">Tether (USDT)</SelectItem>
                           </SelectContent>
                         </Select>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Wallet Address Used</Label>
+                          <Input 
+                            className="bg-background"
+                            placeholder="Your wallet address..." 
+                            onChange={(e) => setPaymentDetails({ ...paymentDetails, walletAddress: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Transaction Hash ID</Label>
+                          <Input 
+                            className="bg-background"
+                            placeholder="Tx Hash..." 
+                            onChange={(e) => setPaymentDetails({ ...paymentDetails, txHash: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Proof of Payment (Image URL)</Label>
+                          <Input 
+                            className="bg-background"
+                            placeholder="URL to screenshot..." 
+                            onChange={(e) => setPaymentDetails({ ...paymentDetails, proofUrl: e.target.value })}
+                          />
+                        </div>
                       </div>
                     )}
 
                     {paymentMethod === "gift_card" && (
                       <div className="p-4 bg-secondary/50 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <Label className="text-xs font-bold uppercase">Gift Card Code</Label>
+                        <Label className="text-xs font-bold uppercase">Gift Card Details</Label>
                         <Input 
                           className="bg-background"
-                          placeholder="Enter 16-digit code..." 
+                          placeholder="Card Name (e.g. Amazon, iTunes)..." 
+                          onChange={(e) => setPaymentDetails({ ...paymentDetails, cardName: e.target.value })}
+                        />
+                        <Select onValueChange={(val) => setPaymentDetails({ ...paymentDetails, cardType: val })}>
+                          <SelectTrigger className="bg-background">
+                            <SelectValue placeholder="Select card type..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="physical">Physical Card</SelectItem>
+                            <SelectItem value="e-code">E-Code</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input 
+                          className="bg-background"
+                          placeholder="Gift Card Code..." 
                           onChange={(e) => setPaymentDetails({ ...paymentDetails, code: e.target.value })}
                         />
+                        <div className="space-y-2">
+                          <Label className="text-xs">Card Image/Receipt URL</Label>
+                          <Input 
+                            className="bg-background"
+                            placeholder="URL to image..." 
+                            onChange={(e) => setPaymentDetails({ ...paymentDetails, cardImageUrl: e.target.value })}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>

@@ -31,9 +31,9 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(), // References users.id
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
-  status: text("status", { enum: ["pending", "paid", "shipped", "completed", "cancelled"] }).default("pending").notNull(),
+  status: text("status", { enum: ["pending", "paid", "shipped", "completed", "cancelled", "awaiting_confirmation"] }).default("pending").notNull(),
   paymentMethod: text("payment_method", { enum: ["card", "crypto", "gift_card"] }),
-  paymentDetails: text("payment_details"), // JSON or transaction hash
+  paymentDetails: text("payment_details"), // Store JSON: { walletAddress, txHash, proofUrl, cardType, cardName, cardImageUrl }
   createdAt: timestamp("created_at").defaultNow(),
 });
 
