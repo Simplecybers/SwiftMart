@@ -55,13 +55,17 @@ export default function Admin() {
     return <Redirect to="/" />;
   }
 
+  const { data: usersData } = useQuery<User[]>({ 
+    queryKey: ["/api/admin/users"] 
+  });
+
   return (
     <div className="min-h-screen bg-background pb-12">
       <Navbar />
       <div className="container px-4 py-8">
         <h1 className="text-3xl font-display font-bold mb-8">Admin Dashboard</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="hover-elevate">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-1">
               <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
@@ -69,6 +73,15 @@ export default function Admin() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{orders?.length || 0}</div>
+            </CardContent>
+          </Card>
+          <Card className="hover-elevate">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-1">
+              <CardTitle className="text-sm font-medium">Platform Users</CardTitle>
+              <Users className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{usersData?.length || 0}</div>
             </CardContent>
           </Card>
           <Card className="hover-elevate">
@@ -82,11 +95,13 @@ export default function Admin() {
           </Card>
           <Card className="hover-elevate">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-1">
-              <CardTitle className="text-sm font-medium">Pending Shipments</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
               <Package className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{orders?.filter(o => o.status === "pending").length || 0}</div>
+              <div className="text-2xl font-bold">
+                ${orders?.reduce((acc, o) => acc + Number(o.totalAmount), 0).toFixed(0)}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -94,8 +109,39 @@ export default function Admin() {
         <Tabs defaultValue="orders" className="space-y-4">
           <TabsList className="bg-secondary/50 p-1 rounded-xl">
             <TabsTrigger value="orders" className="rounded-lg">Recent Orders</TabsTrigger>
-            <TabsTrigger value="tasks" className="rounded-lg">Tasks & Operations</TabsTrigger>
+            <TabsTrigger value="users" className="rounded-lg">User Management</TabsTrigger>
+            <TabsTrigger value="tasks" className="rounded-lg">System Tasks</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="users">
+            <Card>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="p-4 text-left font-medium">User</th>
+                      <th className="p-4 text-left font-medium">Role</th>
+                      <th className="p-4 text-left font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usersData?.map(u => (
+                      <tr key={u.id} className="border-b">
+                        <td className="p-4">
+                          <div className="font-bold">{u.name}</div>
+                          <div className="text-xs text-muted-foreground">{u.username}</div>
+                        </td>
+                        <td className="p-4"><Badge variant="secondary">{u.role}</Badge></td>
+                        <td className="p-4">
+                          <Button variant="ghost" size="sm">Manage</Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="orders">
             <Card>

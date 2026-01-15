@@ -17,6 +17,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
 
   getProducts(category?: string, search?: string): Promise<Product[]>;
+  getProductsByVendor(vendorId: number): Promise<Product[]>;
   getProduct(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
 
@@ -70,6 +71,10 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
+  async getProductsByVendor(vendorId: number): Promise<Product[]> {
+    return await db.select().from(products).where(eq(products.vendorId, vendorId));
+  }
+
   async getProduct(id: number): Promise<Product | undefined> {
     const [product] = await db.select().from(products).where(eq(products.id, id));
     return product;
@@ -95,7 +100,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrders(userId: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment })[]> {
-    const userOrders = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    let userOrders;
+    
+    if (user?.role === 'admin') {
+      userOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+    } else if (user?.role === 'vendor') {
+      // For vendors, we only show orders that contain their products
+      const vendorProducts = await db.select().from(products).where(eq(products.vendorId, userId));
+      const vendorProductIds = vendorProducts.map(p => p.id);
+      
+      if (vendorProductIds.length === 0) return [];
+      
+      const vendorOrderItems = await db.select().from(orderItems).where(db.inArray(orderItems.productId, vendorProductIds));
+      const orderIds = [...new Set(vendorOrderItems.map(oi => oi.orderId))];
+      
+      if (orderIds.length === 0) return [];
+      
+      userOrders = await db.select().from(orders).where(db.inArray(orders.id, orderIds)).orderBy(desc(orders.createdAt));
+    } else {
+      userOrders = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
+    }
     
     const results = await Promise.all(userOrders.map(async (order) => {
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));

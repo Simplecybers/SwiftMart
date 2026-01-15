@@ -13,6 +13,7 @@ import Orders from "@/pages/Orders";
 import Tracking from "@/pages/Tracking";
 import Auth from "@/pages/Auth";
 import Admin from "@/pages/Admin";
+import VendorDashboard from "@/pages/VendorDashboard";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/track/:trackingNumber" component={Tracking} />
       <Route path="/auth" component={Auth} />
       <Route path="/dashboard" component={Admin} />
+      <Route path="/vendor" component={VendorDashboard} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>

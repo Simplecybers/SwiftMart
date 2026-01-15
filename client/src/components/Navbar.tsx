@@ -69,11 +69,19 @@ export function Navbar() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="cursor-pointer">Dashboard</Link>
+                  {user.role === 'admin' ? (
+                    <Link href="/dashboard" className="cursor-pointer">Admin Dashboard</Link>
+                  ) : user.role === 'vendor' ? (
+                    <Link href="/vendor" className="cursor-pointer">Vendor Dashboard</Link>
+                  ) : (
+                    <Link href="/orders" className="cursor-pointer">My Orders</Link>
+                  )}
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/orders" className="cursor-pointer">My Orders</Link>
-                </DropdownMenuItem>
+                {user.role !== 'customer' && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/orders" className="cursor-pointer">Orders Management</Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => logout()} className="text-destructive focus:text-destructive cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />

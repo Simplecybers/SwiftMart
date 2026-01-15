@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { setupAuth, hashPassword } from "./auth";
 import { z } from "zod";
+import { db } from "./db";
+import { users as usersTable } from "@shared/schema";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Setup Auth (Passport)
@@ -13,6 +15,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get(api.products.list.path, async (req, res) => {
     const { category, search } = req.query as { category?: string, search?: string };
     const products = await storage.getProducts(category, search);
+    res.json(products);
+  });
+
+  app.get("/api/vendor/products", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
+    const user = req.user as any;
+    if (user.role !== "vendor") return res.status(403).send("Forbidden");
+    const products = await storage.getProductsByVendor(user.id);
     res.json(products);
   });
 
@@ -92,13 +102,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(order);
   });
 
-  app.patch("/api/orders/:id/status", async (req, res) => {
+  app.get("/api/admin/users", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).send("Unauthorized");
     const user = req.user as any;
     if (user.role !== "admin") return res.status(403).send("Forbidden");
-    
-    const order = await storage.updateOrderStatus(Number(req.params.id), req.body.status);
-    res.json(order);
+    const users = await db.select().from(usersTable);
+    res.json(users);
   });
 
   // Tracking
