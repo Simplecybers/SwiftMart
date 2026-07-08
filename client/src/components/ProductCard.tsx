@@ -1,55 +1,68 @@
 import { Link } from "wouter";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, Star } from "lucide-react";
 import { type Product } from "@shared/schema";
 import { useCart } from "@/hooks/use-cart";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 export function ProductCard({ product }: { product: Product }) {
   const addItem = useCart((state) => state.addItem);
+  const discount = Math.round((1 - Number(product.price) / (Number(product.price) * 1.25)) * 100);
+  const originalPrice = (Number(product.price) * 1.25).toFixed(2);
 
   return (
-    <Card className="group overflow-hidden transition-all hover:shadow-lg border-border/50">
-      <Link href={`/products/${product.id}`} className="block relative aspect-square overflow-hidden bg-secondary/50">
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
-        {Number(product.stock) < 5 && (
-          <Badge variant="destructive" className="absolute top-2 left-2">
-            Low Stock
-          </Badge>
-        )}
-      </Link>
-      <CardContent className="p-4">
-        <div className="mb-2 text-xs text-muted-foreground uppercase tracking-wide font-semibold">
-          {product.category}
+    <div className="group bg-white rounded-xl overflow-hidden hover:shadow-md transition-shadow" data-testid={`card-product-${product.id}`}>
+      <Link href={`/products/${product.id}`} className="block relative" data-testid={`link-product-${product.id}`}>
+        <div className="relative aspect-square overflow-hidden bg-gray-50">
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+          {Number(product.stock) < 5 && (
+            <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full" data-testid={`badge-low-stock-${product.id}`}>
+              Almost Gone
+            </span>
+          )}
+          <span className="absolute top-1.5 right-1.5 bg-[#fa5100] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full" data-testid={`badge-discount-${product.id}`}>
+            -{discount}%
+          </span>
         </div>
+      </Link>
+
+      <div className="p-2">
         <Link href={`/products/${product.id}`}>
-          <h3 className="font-display text-lg font-bold leading-tight line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+          <p className="text-xs text-gray-600 leading-tight line-clamp-2 mb-1.5 hover:text-[#fa5100] transition-colors" data-testid={`text-product-name-${product.id}`}>
             {product.name}
-          </h3>
+          </p>
         </Link>
-        <div className="flex items-baseline gap-2">
-          <span className="text-xl font-bold text-primary">
+
+        {/* Rating */}
+        <div className="flex items-center gap-1 mb-1.5">
+          <div className="flex">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Star key={s} className={`h-2.5 w-2.5 ${s <= 4 ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"}`} />
+            ))}
+          </div>
+          <span className="text-[9px] text-gray-400">({Math.floor(Math.random() * 500 + 50)})</span>
+        </div>
+
+        {/* Price */}
+        <div className="flex items-baseline gap-1 mb-2">
+          <span className="text-sm font-black text-[#fa5100]" data-testid={`text-price-${product.id}`}>
             ${Number(product.price).toFixed(2)}
           </span>
-          <span className="text-sm text-muted-foreground line-through">
-            ${(Number(product.price) * 1.2).toFixed(2)}
-          </span>
+          <span className="text-[9px] text-gray-400 line-through">${originalPrice}</span>
         </div>
-      </CardContent>
-      <CardFooter className="p-4 pt-0">
-        <Button 
-          className="w-full font-semibold group-hover:bg-primary group-hover:text-white transition-all"
-          onClick={() => addItem(product)}
+
+        {/* Add to cart */}
+        <button
+          onClick={(e) => { e.preventDefault(); addItem(product); }}
+          className="w-full bg-[#fa5100] hover:bg-[#e04800] active:bg-[#c53d00] text-white text-xs font-bold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+          data-testid={`button-add-to-cart-${product.id}`}
         >
-          <ShoppingCart className="mr-2 h-4 w-4" />
+          <ShoppingCart className="h-3 w-3" />
           Add to Cart
-        </Button>
-      </CardFooter>
-    </Card>
+        </button>
+      </div>
+    </div>
   );
 }
