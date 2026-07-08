@@ -2,7 +2,7 @@ import { useProducts } from "@/hooks/use-products";
 import { ProductCard } from "@/components/ProductCard";
 import { Navbar } from "@/components/Navbar";
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { ChevronRight, Zap, Truck, Shield, RotateCcw, Tag, Flame, Star, Gift } from "lucide-react";
 
 const CATEGORIES = [
@@ -24,9 +24,24 @@ const BANNERS = [
 
 export default function Home() {
   const [activeBanner, setActiveBanner] = useState(0);
-  const [activeCategory, setActiveCategory] = useState("All");
-  const { data: products, isLoading } = useProducts({});
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  const params = new URLSearchParams(searchString);
+  const activeCategory = params.get("category") || "All";
+  const activeSearch = params.get("search") || "";
+  const { data: products, isLoading } = useProducts({
+    category: activeCategory !== "All" ? activeCategory : undefined,
+    search: activeSearch || undefined,
+  });
   const banner = BANNERS[activeBanner];
+
+  const setCategory = (name: string) => {
+    if (name === activeCategory) {
+      setLocation("/");
+    } else {
+      setLocation(`/?category=${encodeURIComponent(name)}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 font-body">
@@ -88,7 +103,7 @@ export default function Home() {
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.name}
-                onClick={() => setActiveCategory(cat.name)}
+                onClick={() => setCategory(cat.name)}
                 className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all ${activeCategory === cat.name ? "ring-2 ring-[#fa5100] bg-orange-50" : "hover:bg-gray-50"}`}
                 data-testid={`button-category-${cat.name.toLowerCase()}`}
               >
@@ -135,8 +150,19 @@ export default function Home() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Star className="h-4 w-4 text-[#fa5100] fill-[#fa5100]" />
-              <h2 className="font-bold text-sm text-gray-800">Recommended For You</h2>
+              <h2 className="font-bold text-sm text-gray-800" data-testid="text-products-heading">
+                {activeSearch ? `Results for "${activeSearch}"` : activeCategory !== "All" ? activeCategory : "Recommended For You"}
+              </h2>
             </div>
+            {(activeSearch || activeCategory !== "All") && (
+              <button
+                onClick={() => setLocation("/")}
+                className="text-[#fa5100] text-xs font-medium"
+                data-testid="button-clear-filters"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           {isLoading ? (
@@ -149,11 +175,15 @@ export default function Home() {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : products && products.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {products?.map((product) => (
+              {products.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-400 text-sm" data-testid="text-no-products">
+              No products found. Try a different search or category.
             </div>
           )}
         </div>

@@ -1,10 +1,11 @@
 import { 
   User, InsertUser, Product, InsertProduct, Order, InsertOrder, 
   OrderItem, InsertOrderItem, Shipment, InsertShipment, TrackingLog, 
-  InsertTrackingLog, users, products, orders, orderItems, shipments, trackingLogs
+  InsertTrackingLog, Task, InsertTask,
+  users, products, orders, orderItems, shipments, trackingLogs, tasks
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray, or, ilike, and } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -20,6 +21,8 @@ export interface IStorage {
   getProductsByVendor(vendorId: number): Promise<Product[]>;
   getProduct(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product | undefined>;
+  deleteProduct(id: number): Promise<boolean>;
 
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   getOrders(userId: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment })[]>;
@@ -28,12 +31,17 @@ export interface IStorage {
 
   createShipment(shipment: InsertShipment): Promise<Shipment>;
   getShipmentByTracking(trackingNumber: string): Promise<(Shipment & { logs: TrackingLog[] }) | undefined>;
+  getShipmentByOrderId(orderId: number): Promise<Shipment | undefined>;
   addTrackingLog(log: InsertTrackingLog): Promise<TrackingLog>;
+  updateShipmentStatus(shipmentId: number, status: string): Promise<Shipment>;
 
   getTasks(userId: number): Promise<Task[]>;
   createTask(task: InsertTask): Promise<Task>;
   updateTask(taskId: number, task: Partial<InsertTask>): Promise<Task>;
   getAllTasks(): Promise<Task[]>;
+
+  getUsers(): Promise<User[]>;
+  updateUserRole(id: number, role: string): Promise<User | undefined>;
 
   sessionStore: session.Store;
 }
@@ -64,15 +72,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProducts(category?: string, search?: string): Promise<Product[]> {
-    let query = db.select().from(products);
-    if (category) {
-      query = query.where(eq(products.category, category)) as any;
+    const conditions = [];
+    if (category && category !== "All") {
+      conditions.push(eq(products.category, category));
     }
-    return await query;
+    if (search) {
+      conditions.push(
+        or(
+          ilike(products.name, `%${search}%`),
+          ilike(products.description, `%${search}%`),
+          ilike(products.category, `%${search}%`)
+        )
+      );
+    }
+
+    if (conditions.length > 0) {
+      return await db.select().from(products).where(and(...conditions)).orderBy(desc(products.id));
+    }
+    return await db.select().from(products).orderBy(desc(products.id));
   }
 
   async getProductsByVendor(vendorId: number): Promise<Product[]> {
-    return await db.select().from(products).where(eq(products.vendorId, vendorId));
+    return await db.select().from(products).where(eq(products.vendorId, vendorId)).orderBy(desc(products.id));
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
@@ -83,6 +104,16 @@ export class DatabaseStorage implements IStorage {
   async createProduct(product: InsertProduct): Promise<Product> {
     const [newProduct] = await db.insert(products).values(product).returning();
     return newProduct;
+  }
+
+  async updateProduct(id: number, product: Partial<InsertProduct>): Promise<Product | undefined> {
+    const [updated] = await db.update(products).set(product).where(eq(products.id, id)).returning();
+    return updated;
+  }
+
+  async deleteProduct(id: number): Promise<boolean> {
+    const result = await db.delete(products).where(eq(products.id, id)).returning();
+    return result.length > 0;
   }
 
   async createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
@@ -112,12 +143,12 @@ export class DatabaseStorage implements IStorage {
       
       if (vendorProductIds.length === 0) return [];
       
-      const vendorOrderItems = await db.select().from(orderItems).where(db.inArray(orderItems.productId, vendorProductIds));
+      const vendorOrderItems = await db.select().from(orderItems).where(inArray(orderItems.productId, vendorProductIds));
       const orderIds = [...new Set(vendorOrderItems.map(oi => oi.orderId))];
       
       if (orderIds.length === 0) return [];
       
-      userOrders = await db.select().from(orders).where(db.inArray(orders.id, orderIds)).orderBy(desc(orders.createdAt));
+      userOrders = await db.select().from(orders).where(inArray(orders.id, orderIds)).orderBy(desc(orders.createdAt));
     } else {
       userOrders = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
     }
@@ -160,12 +191,22 @@ export class DatabaseStorage implements IStorage {
     return { ...shipment, logs };
   }
 
+  async getShipmentByOrderId(orderId: number): Promise<Shipment | undefined> {
+    const [shipment] = await db.select().from(shipments).where(eq(shipments.orderId, orderId));
+    return shipment;
+  }
+
   async addTrackingLog(log: InsertTrackingLog): Promise<TrackingLog> {
     const [newLog] = await db.insert(trackingLogs).values(log).returning();
     await db.update(shipments)
       .set({ status: log.status })
       .where(eq(shipments.id, log.shipmentId));
     return newLog;
+  }
+
+  async updateShipmentStatus(shipmentId: number, status: string): Promise<Shipment> {
+    const [updated] = await db.update(shipments).set({ status: status as any }).where(eq(shipments.id, shipmentId)).returning();
+    return updated;
   }
 
   async getTasks(userId: number): Promise<Task[]> {
@@ -183,6 +224,15 @@ export class DatabaseStorage implements IStorage {
 
   async updateTask(taskId: number, task: Partial<InsertTask>): Promise<Task> {
     const [updated] = await db.update(tasks).set(task).where(eq(tasks.id, taskId)).returning();
+    return updated;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(desc(users.id));
+  }
+
+  async updateUserRole(id: number, role: string): Promise<User | undefined> {
+    const [updated] = await db.update(users).set({ role: role as any }).where(eq(users.id, id)).returning();
     return updated;
   }
 }

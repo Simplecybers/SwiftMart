@@ -3,10 +3,17 @@ import { ShoppingCart, Star } from "lucide-react";
 import { type Product } from "@shared/schema";
 import { useCart } from "@/hooks/use-cart";
 
+function seededRandom(seed: number) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
 export function ProductCard({ product }: { product: Product }) {
   const addItem = useCart((state) => state.addItem);
   const discount = Math.round((1 - Number(product.price) / (Number(product.price) * 1.25)) * 100);
   const originalPrice = (Number(product.price) * 1.25).toFixed(2);
+  const ratingCount = Math.floor(seededRandom(product.id) * 500 + 50);
+  const filledStars = product.id % 5 === 0 ? 5 : 4;
 
   return (
     <div className="group bg-white rounded-xl overflow-hidden hover:shadow-md transition-shadow" data-testid={`card-product-${product.id}`}>
@@ -39,10 +46,10 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="flex items-center gap-1 mb-1.5">
           <div className="flex">
             {[1, 2, 3, 4, 5].map((s) => (
-              <Star key={s} className={`h-2.5 w-2.5 ${s <= 4 ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"}`} />
+              <Star key={s} className={`h-2.5 w-2.5 ${s <= filledStars ? "text-yellow-400 fill-yellow-400" : "text-gray-200 fill-gray-200"}`} />
             ))}
           </div>
-          <span className="text-[9px] text-gray-400">({Math.floor(Math.random() * 500 + 50)})</span>
+          <span className="text-[9px] text-gray-400" data-testid={`text-rating-count-${product.id}`}>({ratingCount})</span>
         </div>
 
         {/* Price */}

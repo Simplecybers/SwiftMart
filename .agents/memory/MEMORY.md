@@ -1,0 +1,1 @@
+- [Temu Lite seed data reset](temu-lite-seeding.md) — seedData() only runs when products table is empty; must truncate tables to reseed after schema/data changes.

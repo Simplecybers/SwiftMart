@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { ShoppingCart, Search, LogOut, User as UserIcon, ChevronDown, MapPin, Bell } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import { useUser, useLogout } from "@/hooks/use-auth";
@@ -15,13 +15,17 @@ import {
 
 export function Navbar() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const cartItems = useCart((state) => state.items);
   const { data: user } = useUser();
   const { mutate: logout } = useLogout();
-  const [search, setSearch] = useState("");
+  const initialSearch = new URLSearchParams(searchString).get("search") || "";
+  const [search, setSearch] = useState(initialSearch);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmed = search.trim();
+    setLocation(trimmed ? `/?search=${encodeURIComponent(trimmed)}` : "/");
   };
 
   return (
@@ -124,12 +128,12 @@ export function Navbar() {
           {[
             { label: "New Arrivals", href: "/" },
             { label: "Best Sellers", href: "/" },
-            { label: "Electronics", href: "/" },
-            { label: "Fashion", href: "/" },
-            { label: "Home & Kitchen", href: "/" },
-            { label: "Beauty", href: "/" },
-            { label: "Sports", href: "/" },
-            { label: "Toys", href: "/" },
+            { label: "Electronics", href: "/?category=Electronics" },
+            { label: "Fashion", href: "/?category=Fashion" },
+            { label: "Home & Kitchen", href: "/?category=Home" },
+            { label: "Beauty", href: "/?category=Beauty" },
+            { label: "Sports", href: "/?category=Sports" },
+            { label: "Toys", href: "/?category=Toys" },
             { label: "Track Order", href: "/track" },
           ].map((item) => (
             <Link
