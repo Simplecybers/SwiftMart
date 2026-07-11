@@ -103,6 +103,8 @@ export const api = {
           productId: z.number(),
           quantity: z.number(),
         })),
+        paymentMethod: z.enum(["card", "crypto", "gift_card"]).optional(),
+        paymentDetails: z.record(z.any()).optional(),
       }),
       responses: {
         201: z.custom<typeof orders.$inferSelect>(),

@@ -131,7 +131,7 @@ export default function Admin() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-total-volume">
-                ${orders?.reduce((acc, o) => acc + Number(o.totalAmount), 0).toFixed(0)}
+                ${(orders?.reduce((acc, o) => acc + Number(o.totalAmount), 0) ?? 0).toFixed(0)}
               </div>
             </CardContent>
           </Card>
@@ -207,7 +207,7 @@ export default function Admin() {
                           <td className="p-4 font-mono font-bold text-primary">#{order.id}</td>
                           <td className="p-4">
                             <Badge variant={order.status === 'awaiting_confirmation' ? 'secondary' : 'outline'} className="capitalize" data-testid={`badge-order-status-${order.id}`}>
-                              {order.status?.replace('_', ' ')}
+                              {order.status?.replace(/_/g, ' ')}
                             </Badge>
                           </td>
                           <td className="p-4">

@@ -331,7 +331,7 @@ export default function VendorDashboard() {
                           <td className="p-4 font-mono font-bold text-primary">#{order.id}</td>
                           <td className="p-4">{order.items?.length || 0} item(s)</td>
                           <td className="p-4">
-                            <Badge variant="outline" className="capitalize">{order.status?.replace('_', ' ')}</Badge>
+                            <Badge variant="outline" className="capitalize">{order.status?.replace(/_/g, ' ')}</Badge>
                           </td>
                           <td className="p-4 font-bold">${Number(order.totalAmount).toFixed(2)}</td>
                           <td className="p-4">

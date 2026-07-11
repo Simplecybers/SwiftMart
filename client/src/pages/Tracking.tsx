@@ -80,7 +80,7 @@ export default function Tracking() {
                         "text-lg px-4 py-1 mb-2 capitalize",
                         shipment.status === 'delivered' ? 'bg-green-500 hover:bg-green-600' : 'bg-primary hover:bg-primary/90'
                       )}>
-                        {shipment.status.replace('_', ' ')}
+                        {shipment.status.replace(/_/g, ' ')}
                       </Badge>
                       <p className="text-sm text-muted-foreground">
                         Carrier: <span className="font-semibold text-foreground">{shipment.carrier}</span>
@@ -109,7 +109,7 @@ export default function Tracking() {
                           )} />
                           <div className="space-y-1">
                             <p className="font-bold text-lg leading-none capitalize">
-                              {log.status.replace('_', ' ')}
+                              {log.status.replace(/_/g, ' ')}
                             </p>
                             <div className="flex items-center text-sm text-muted-foreground gap-2">
                               <MapPin className="h-3 w-3" />

@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+  awaiting_confirmation: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
   paid: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   shipped: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
   completed: "bg-green-500/10 text-green-600 dark:text-green-400",
