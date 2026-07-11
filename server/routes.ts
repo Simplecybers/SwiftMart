@@ -7,6 +7,9 @@ import { z } from "zod";
 import { db } from "./db";
 import { users as usersTable } from "@shared/schema";
 import { insertProductSchema, insertTaskSchema } from "@shared/schema";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
@@ -29,9 +32,46 @@ const ORDER_STATUS_TO_SHIPMENT_STATUS: Record<string, string | undefined> = {
   cancelled: undefined,
 };
 
+// Multer setup for image uploads
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const ext = path.extname(file.originalname);
+      cb(null, `${unique}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp/;
+    if (allowed.test(path.extname(file.originalname).toLowerCase()) && allowed.test(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Setup Auth (Passport)
   setupAuth(app);
+
+  // Serve uploaded files
+  app.use("/uploads", (req, res, next) => {
+    res.setHeader("Cache-Control", "public, max-age=31536000");
+    next();
+  });
+
+  // ---------- Image Upload ----------
+  app.post("/api/upload", requireAuth, upload.single("image"), (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ url });
+  });
 
   // ---------- Products ----------
   app.get(api.products.list.path, async (req, res) => {
@@ -127,8 +167,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const order = await storage.createOrder({
       userId: user.id,
       totalAmount: totalAmount.toFixed(2),
-      status: paymentMethod === "card" ? "paid" : "awaiting_confirmation",
-      paymentMethod,
+      status: "awaiting_confirmation",
+      paymentMethod: paymentMethod || "crypto",
       paymentDetails: typeof paymentDetails === "string" ? paymentDetails : JSON.stringify(paymentDetails || {}),
     }, orderItemsData);
 
@@ -153,9 +193,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       shipmentId: shipment.id,
       status: "order_placed",
       location: "Origin Warehouse",
-      note: order.status === "paid"
-        ? "Payment confirmed. Order has been placed and is being processed."
-        : "Order received, awaiting payment confirmation from our team.",
+      note: "Order received, awaiting payment confirmation from our team.",
     });
 
     res.status(201).json({ ...order, trackingNumber });
@@ -221,6 +259,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(safe);
   });
 
+  app.delete("/api/admin/users/:id", requireRole("admin"), async (req, res) => {
+    const id = Number(req.params.id);
+    const deleted = await storage.deleteUser(id);
+    if (!deleted) return res.status(404).json({ message: "User not found" });
+    res.status(204).send();
+  });
+
   // ---------- Tasks (internal ops board for admins) ----------
   app.get("/api/tasks", requireAuth, async (req, res) => {
     const user = req.user as any;
@@ -241,6 +286,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/tasks/:id", requireRole("admin"), async (req, res) => {
     const updated = await storage.updateTask(Number(req.params.id), req.body);
     res.json(updated);
+  });
+
+  app.delete("/api/tasks/:id", requireRole("admin"), async (req, res) => {
+    await storage.deleteTask(Number(req.params.id));
+    res.status(204).send();
   });
 
   // ---------- Tracking ----------
@@ -337,13 +387,12 @@ async function seedData() {
     createdProducts.push(await storage.createProduct(p as any));
   }
 
-  // Seed a handful of demo orders across different statuses so dashboards have live data
   const sampleOrderConfigs = [
-    { buyer: customer, product: createdProducts[0], qty: 2, paymentMethod: "card", status: "paid" },
+    { buyer: customer, product: createdProducts[0], qty: 2, paymentMethod: "crypto", status: "paid" },
     { buyer: customer, product: createdProducts[1], qty: 1, paymentMethod: "crypto", status: "awaiting_confirmation" },
     { buyer: customer, product: createdProducts[6], qty: 1, paymentMethod: "gift_card", status: "awaiting_confirmation" },
-    { buyer: customer, product: createdProducts[11], qty: 3, paymentMethod: "card", status: "shipped" },
-    { buyer: customer, product: createdProducts[17], qty: 1, paymentMethod: "card", status: "completed" },
+    { buyer: customer, product: createdProducts[11], qty: 3, paymentMethod: "crypto", status: "shipped" },
+    { buyer: customer, product: createdProducts[17], qty: 1, paymentMethod: "gift_card", status: "completed" },
   ];
 
   for (const cfg of sampleOrderConfigs) {
@@ -356,9 +405,7 @@ async function seedData() {
       paymentDetails: JSON.stringify(
         cfg.paymentMethod === "crypto"
           ? { currency: "usdt", walletAddress: "TXn9a...4fQ2", txHash: "0xa1b2c3d4e5f6" }
-          : cfg.paymentMethod === "gift_card"
-          ? { cardName: "Amazon", cardType: "e-code", code: "AMZN-XXXX-YYYY" }
-          : {}
+          : { cardName: "Amazon", cardType: "e-code", code: "AMZN-XXXX-YYYY" }
       ),
     }, [{ productId: cfg.product.id, quantity: cfg.qty, price: cfg.product.price }]);
 
@@ -405,7 +452,6 @@ async function seedData() {
     }
   }
 
-  // Seed a couple of internal admin ops tasks
   await storage.createTask({
     userId: admin.id,
     title: "Verify pending crypto payments",

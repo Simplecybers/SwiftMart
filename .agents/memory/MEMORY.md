@@ -1,1 +1,4 @@
 - [Temu Lite seed data reset](temu-lite-seeding.md) — seedData() only runs when products table is empty; must truncate tables to reseed after schema/data changes.
+- [Temu Lite payment flow](temu-lite-payments.md) — card payment removed; only crypto + gift_card accepted; all orders go to awaiting_confirmation status and require manual admin confirmation.
+- [Temu Lite image upload](temu-lite-image-upload.md) — multer uploads to /uploads dir (served as static); POST /api/upload with field name "image"; ImageUpload component supports URL mode and file upload mode with drag-drop.
+- [Temu Lite routes](temu-lite-routes.md) — admin dashboard is at /dashboard (not /admin); vendor dashboard at /vendor; upload endpoint at POST /api/upload; vendor products at GET /api/vendor/products.

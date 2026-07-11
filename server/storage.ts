@@ -16,6 +16,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  deleteUser(id: number): Promise<boolean>;
 
   getProducts(category?: string, search?: string): Promise<Product[]>;
   getProductsByVendor(vendorId: number): Promise<Product[]>;
@@ -39,6 +40,7 @@ export interface IStorage {
   createTask(task: InsertTask): Promise<Task>;
   updateTask(taskId: number, task: Partial<InsertTask>): Promise<Task>;
   getAllTasks(): Promise<Task[]>;
+  deleteTask(taskId: number): Promise<boolean>;
 
   getUsers(): Promise<User[]>;
   updateUserRole(id: number, role: string): Promise<User | undefined>;
@@ -69,6 +71,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
   }
 
   async getProducts(category?: string, search?: string): Promise<Product[]> {
@@ -137,7 +144,6 @@ export class DatabaseStorage implements IStorage {
     if (user?.role === 'admin') {
       userOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
     } else if (user?.role === 'vendor') {
-      // For vendors, we only show orders that contain their products
       const vendorProducts = await db.select().from(products).where(eq(products.vendorId, userId));
       const vendorProductIds = vendorProducts.map(p => p.id);
       
@@ -225,6 +231,11 @@ export class DatabaseStorage implements IStorage {
   async updateTask(taskId: number, task: Partial<InsertTask>): Promise<Task> {
     const [updated] = await db.update(tasks).set(task).where(eq(tasks.id, taskId)).returning();
     return updated;
+  }
+
+  async deleteTask(taskId: number): Promise<boolean> {
+    const result = await db.delete(tasks).where(eq(tasks.id, taskId)).returning();
+    return result.length > 0;
   }
 
   async getUsers(): Promise<User[]> {
