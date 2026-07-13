@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
-// Page Imports
 import Home from "@/pages/Home";
 import ProductDetail from "@/pages/ProductDetail";
 import Cart from "@/pages/Cart";
@@ -14,6 +13,7 @@ import Tracking from "@/pages/Tracking";
 import Auth from "@/pages/Auth";
 import Admin from "@/pages/Admin";
 import VendorDashboard from "@/pages/VendorDashboard";
+import Profile from "@/pages/Profile";
 
 function Router() {
   return (
@@ -27,7 +27,7 @@ function Router() {
       <Route path="/auth" component={Auth} />
       <Route path="/dashboard" component={Admin} />
       <Route path="/vendor" component={VendorDashboard} />
-      {/* Fallback to 404 */}
+      <Route path="/profile" component={Profile} />
       <Route component={NotFound} />
     </Switch>
   );

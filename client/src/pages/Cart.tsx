@@ -2,6 +2,7 @@ import { useCart } from "@/hooks/use-cart";
 import { useCreateOrder } from "@/hooks/use-orders";
 import { useUser } from "@/hooks/use-auth";
 import { Navbar } from "@/components/Navbar";
+import { ImageUpload } from "@/components/ImageUpload";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, Bitcoin, Gift, Loader2, Info, AlertCircle } from "lucide-react";
@@ -98,20 +99,16 @@ export default function Cart() {
             <h2 className="text-2xl font-bold mb-2">Your cart is empty</h2>
             <p className="text-muted-foreground mb-8">Looks like you haven't added anything yet.</p>
             <Link href="/">
-              <Button size="lg" className="font-semibold">Start Shopping</Button>
+              <Button size="lg" className="font-semibold" data-testid="button-start-shopping">Start Shopping</Button>
             </Link>
           </div>
         ) : (
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
               {items.map((item) => (
-                <Card key={item.id} className="p-4 flex gap-4 items-center group hover:border-primary/50 transition-colors">
+                <Card key={item.id} className="p-4 flex gap-4 items-center group hover:border-primary/50 transition-colors" data-testid={`card-cart-item-${item.id}`}>
                   <div className="h-24 w-24 bg-secondary rounded-lg overflow-hidden shrink-0">
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <Link href={`/products/${item.id}`}>
@@ -124,30 +121,15 @@ export default function Cart() {
                   </div>
                   <div className="flex flex-col items-end gap-4">
                     <div className="flex items-center gap-2 bg-secondary rounded-lg p-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-md"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => updateQuantity(item.id, item.quantity - 1)} data-testid={`button-decrease-${item.id}`}>
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-md"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      >
+                      <span className="w-8 text-center font-medium text-sm" data-testid={`text-quantity-${item.id}`}>{item.quantity}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={() => updateQuantity(item.id, item.quantity + 1)} data-testid={`button-increase-${item.id}`}>
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => removeItem(item.id)}
-                    >
+                    <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => removeItem(item.id)} data-testid={`button-remove-${item.id}`}>
                       <Trash2 className="h-4 w-4 mr-2" />
                       Remove
                     </Button>
@@ -187,13 +169,13 @@ export default function Cart() {
                       className="grid grid-cols-1 gap-3"
                     >
                       <div className={`flex items-center space-x-2 border p-3 rounded-xl cursor-pointer transition-colors ${paymentMethod === "crypto" ? "border-primary bg-primary/5" : "hover:bg-accent"}`}>
-                        <RadioGroupItem value="crypto" id="crypto" />
+                        <RadioGroupItem value="crypto" id="crypto" data-testid="radio-crypto" />
                         <Label htmlFor="crypto" className="flex items-center gap-2 cursor-pointer w-full font-medium">
                           <Bitcoin className="h-4 w-4 text-orange-500" /> Cryptocurrency
                         </Label>
                       </div>
                       <div className={`flex items-center space-x-2 border p-3 rounded-xl cursor-pointer transition-colors ${paymentMethod === "gift_card" ? "border-primary bg-primary/5" : "hover:bg-accent"}`}>
-                        <RadioGroupItem value="gift_card" id="gift_card" />
+                        <RadioGroupItem value="gift_card" id="gift_card" data-testid="radio-gift-card" />
                         <Label htmlFor="gift_card" className="flex items-center gap-2 cursor-pointer w-full font-medium">
                           <Gift className="h-4 w-4 text-purple-500" /> Gift Card
                         </Label>
@@ -212,7 +194,7 @@ export default function Cart() {
                             setPaymentDetails({ ...paymentDetails, currency: val });
                           }}
                         >
-                          <SelectTrigger className="bg-background">
+                          <SelectTrigger className="bg-background" data-testid="select-crypto">
                             <SelectValue placeholder="Choose crypto..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -222,7 +204,7 @@ export default function Cart() {
                           </SelectContent>
                         </Select>
 
-                        {/* Wallet address to send to */}
+                        {/* Wallet address */}
                         <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg space-y-1">
                           <p className="text-xs font-bold text-orange-700 uppercase">Send Payment To:</p>
                           <p className="text-xs text-gray-500">{selectedWallet.network}</p>
@@ -238,6 +220,7 @@ export default function Cart() {
                                 navigator.clipboard.writeText(selectedWallet.address);
                                 toast({ title: "Address copied!" });
                               }}
+                              data-testid="button-copy-address"
                             >
                               Copy
                             </Button>
@@ -258,6 +241,7 @@ export default function Cart() {
                             className="bg-background text-xs"
                             placeholder="Your wallet address..."
                             onChange={(e) => setPaymentDetails({ ...paymentDetails, walletAddress: e.target.value, currency: cryptoCurrency })}
+                            data-testid="input-wallet-address"
                           />
                         </div>
                         <div className="space-y-2">
@@ -266,16 +250,16 @@ export default function Cart() {
                             className="bg-background text-xs"
                             placeholder="e.g. 0xa1b2c3d4e5f6..."
                             onChange={(e) => setPaymentDetails({ ...paymentDetails, txHash: e.target.value, currency: cryptoCurrency })}
+                            data-testid="input-tx-hash"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-semibold">Proof of Payment (Image URL, optional)</Label>
-                          <Input
-                            className="bg-background text-xs"
-                            placeholder="URL to screenshot..."
-                            onChange={(e) => setPaymentDetails({ ...paymentDetails, proofUrl: e.target.value })}
-                          />
-                        </div>
+
+                        {/* Payment proof upload */}
+                        <ImageUpload
+                          value={paymentDetails.proofUrl || ""}
+                          onChange={(url) => setPaymentDetails({ ...paymentDetails, proofUrl: url })}
+                          label="Payment Proof Screenshot (optional)"
+                        />
                       </div>
                     )}
 
@@ -293,10 +277,11 @@ export default function Cart() {
                             className="bg-background text-xs"
                             placeholder="e.g. Amazon, iTunes, Google Play..."
                             onChange={(e) => setPaymentDetails({ ...paymentDetails, cardName: e.target.value })}
+                            data-testid="input-card-brand"
                           />
                         </div>
                         <Select onValueChange={(val) => setPaymentDetails({ ...paymentDetails, cardType: val })}>
-                          <SelectTrigger className="bg-background">
+                          <SelectTrigger className="bg-background" data-testid="select-card-type">
                             <SelectValue placeholder="Card type..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -310,6 +295,7 @@ export default function Cart() {
                             className="bg-background text-xs"
                             placeholder="Gift card code or PIN..."
                             onChange={(e) => setPaymentDetails({ ...paymentDetails, code: e.target.value })}
+                            data-testid="input-card-code"
                           />
                         </div>
                         <div className="space-y-2">
@@ -319,16 +305,16 @@ export default function Cart() {
                             type="number"
                             placeholder="e.g. 25"
                             onChange={(e) => setPaymentDetails({ ...paymentDetails, cardValue: e.target.value })}
+                            data-testid="input-card-value"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-semibold">Card Image URL (optional)</Label>
-                          <Input
-                            className="bg-background text-xs"
-                            placeholder="URL to card photo..."
-                            onChange={(e) => setPaymentDetails({ ...paymentDetails, cardImageUrl: e.target.value })}
-                          />
-                        </div>
+
+                        {/* Card image upload */}
+                        <ImageUpload
+                          value={paymentDetails.cardImageUrl || ""}
+                          onChange={(url) => setPaymentDetails({ ...paymentDetails, cardImageUrl: url })}
+                          label="Card Photo / Screenshot (optional)"
+                        />
                       </div>
                     )}
                   </div>
@@ -344,6 +330,7 @@ export default function Cart() {
                   className="w-full h-12 text-lg font-bold shadow-lg shadow-primary/20"
                   onClick={handleCheckout}
                   disabled={isPending}
+                  data-testid="button-place-order"
                 >
                   {isPending ? (
                     <>

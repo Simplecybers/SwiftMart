@@ -14,11 +14,15 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role", { enum: ["customer", "vendor", "admin"] }).default("customer").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  bio: text("bio"),
+  avatarUrl: text("avatar_url"),
 });
 
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id").notNull(), // References users.id
+  vendorId: integer("vendor_id").notNull(),
   name: text("name").notNull(),
   description: text("description").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
@@ -29,17 +33,17 @@ export const products = pgTable("products", {
 
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(), // References users.id
+  userId: integer("user_id").notNull(),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: text("status", { enum: ["pending", "paid", "shipped", "completed", "cancelled", "awaiting_confirmation"] }).default("pending").notNull(),
   paymentMethod: text("payment_method", { enum: ["card", "crypto", "gift_card"] }),
-  paymentDetails: text("payment_details"), // Store JSON: { walletAddress, txHash, proofUrl, cardType, cardName, cardImageUrl }
+  paymentDetails: text("payment_details"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(), // Assigned to
+  userId: integer("user_id").notNull(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   status: text("status", { enum: ["todo", "in_progress", "completed"] }).default("todo").notNull(),
@@ -49,15 +53,15 @@ export const tasks = pgTable("tasks", {
 
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull(), // References orders.id
-  productId: integer("product_id").notNull(), // References products.id
+  orderId: integer("order_id").notNull(),
+  productId: integer("product_id").notNull(),
   quantity: integer("quantity").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
 });
 
 export const shipments = pgTable("shipments", {
   id: serial("id").primaryKey(),
-  orderId: integer("order_id").notNull(), // References orders.id
+  orderId: integer("order_id").notNull(),
   trackingNumber: text("tracking_number").notNull().unique(),
   carrier: text("carrier").notNull(),
   status: text("status", { enum: ["order_placed", "processing", "shipped", "in_transit", "out_for_delivery", "delivered"] }).default("order_placed").notNull(),
@@ -66,11 +70,22 @@ export const shipments = pgTable("shipments", {
 
 export const trackingLogs = pgTable("tracking_logs", {
   id: serial("id").primaryKey(),
-  shipmentId: integer("shipment_id").notNull(), // References shipments.id
+  shipmentId: integer("shipment_id").notNull(),
   status: text("status", { enum: ["order_placed", "processing", "shipped", "in_transit", "out_for_delivery", "delivered"] }).notNull(),
   location: text("location").notNull(),
   timestamp: timestamp("timestamp").defaultNow(),
   note: text("note"),
+});
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  link: text("link"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
@@ -78,58 +93,39 @@ export const usersRelations = relations(users, ({ many }) => ({
   orders: many(orders),
   products: many(products),
   tasks: many(tasks),
+  notifications: many(notifications),
 }));
 
 export const tasksRelations = relations(tasks, ({ one }) => ({
-  user: one(users, {
-    fields: [tasks.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [tasks.userId], references: [users.id] }),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
-  vendor: one(users, {
-    fields: [products.vendorId],
-    references: [users.id],
-  }),
+  vendor: one(users, { fields: [products.vendorId], references: [users.id] }),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
-  user: one(users, {
-    fields: [orders.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [orders.userId], references: [users.id] }),
   items: many(orderItems),
-  shipment: one(shipments, {
-    fields: [orders.id],
-    references: [shipments.orderId],
-  }),
+  shipment: one(shipments, { fields: [orders.id], references: [shipments.orderId] }),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
-  order: one(orders, {
-    fields: [orderItems.orderId],
-    references: [orders.id],
-  }),
-  product: one(products, {
-    fields: [orderItems.productId],
-    references: [products.id],
-  }),
+  order: one(orders, { fields: [orderItems.orderId], references: [orders.id] }),
+  product: one(products, { fields: [orderItems.productId], references: [products.id] }),
 }));
 
 export const shipmentsRelations = relations(shipments, ({ one, many }) => ({
-  order: one(orders, {
-    fields: [shipments.orderId],
-    references: [orders.id],
-  }),
+  order: one(orders, { fields: [shipments.orderId], references: [orders.id] }),
   logs: many(trackingLogs),
 }));
 
 export const trackingLogsRelations = relations(trackingLogs, ({ one }) => ({
-  shipment: one(shipments, {
-    fields: [trackingLogs.shipmentId],
-    references: [shipments.id],
-  }),
+  shipment: one(shipments, { fields: [trackingLogs.shipmentId], references: [shipments.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
 
 // Schemas
@@ -140,6 +136,7 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: t
 export const insertShipmentSchema = createInsertSchema(shipments).omit({ id: true });
 export const insertTrackingLogSchema = createInsertSchema(trackingLogs).omit({ id: true, timestamp: true });
 export const insertTaskSchema = createInsertSchema(tasks).omit({ id: true, createdAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -153,3 +150,5 @@ export type Shipment = typeof shipments.$inferSelect;
 export type TrackingLog = typeof trackingLogs.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = z.infer<typeof insertTaskSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;

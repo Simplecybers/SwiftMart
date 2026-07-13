@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { setupAuth, hashPassword } from "./auth";
+import { setupAuth, hashPassword, comparePasswords } from "./auth";
 import { z } from "zod";
 import { db } from "./db";
 import { users as usersTable } from "@shared/schema";
@@ -10,6 +10,13 @@ import { insertProductSchema, insertTaskSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import {
+  sendWelcomeEmail,
+  sendOrderConfirmationEmail,
+  sendOrderStatusEmail,
+  sendPasswordChangedEmail,
+  sendNewOrderAlertToAdmin,
+} from "./email";
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
@@ -45,7 +52,7 @@ const upload = multer({
       cb(null, `${unique}${ext}`);
     },
   }),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif|webp/;
     if (allowed.test(path.extname(file.originalname).toLowerCase()) && allowed.test(file.mimetype)) {
@@ -57,10 +64,8 @@ const upload = multer({
 });
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  // Setup Auth (Passport)
   setupAuth(app);
 
-  // Serve uploaded files
   app.use("/uploads", (req, res, next) => {
     res.setHeader("Cache-Control", "public, max-age=31536000");
     next();
@@ -71,6 +76,87 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const url = `/uploads/${req.file.filename}`;
     res.json({ url });
+  });
+
+  // ---------- Profile ----------
+  app.get("/api/profile", requireAuth, (req, res) => {
+    const { password, ...safeUser } = req.user as any;
+    res.json(safeUser);
+  });
+
+  app.patch("/api/profile", requireAuth, async (req, res) => {
+    const user = req.user as any;
+    const schema = z.object({
+      name: z.string().min(1).max(100).optional(),
+      email: z.string().email().optional().or(z.literal("")),
+      phone: z.string().max(30).optional(),
+      bio: z.string().max(500).optional(),
+      avatarUrl: z.string().optional(),
+    });
+    try {
+      const data = schema.parse(req.body);
+      const updated = await storage.updateUser(user.id, data as any);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const { password, ...safe } = updated;
+      res.json(safe);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Invalid data" });
+    }
+  });
+
+  app.post("/api/profile/change-password", requireAuth, async (req, res) => {
+    const user = req.user as any;
+    const schema = z.object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(6),
+    });
+    try {
+      const { currentPassword, newPassword } = schema.parse(req.body);
+      const fullUser = await storage.getUser(user.id);
+      if (!fullUser) return res.status(404).json({ message: "User not found" });
+      const valid = await comparePasswords(currentPassword, fullUser.password);
+      if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
+      const hashed = await hashPassword(newPassword);
+      await storage.updateUser(user.id, {} as any);
+      await db.update(usersTable).set({ password: hashed }).where((await import("drizzle-orm")).eq(usersTable.id, user.id));
+      if (fullUser.email) {
+        await sendPasswordChangedEmail(fullUser.email, fullUser.name);
+      }
+      await storage.createNotification({
+        userId: user.id,
+        type: "account",
+        title: "Password Changed",
+        body: "Your account password was successfully updated.",
+        isRead: false,
+      });
+      res.json({ message: "Password changed successfully" });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message || "Failed to change password" });
+    }
+  });
+
+  // ---------- Notifications ----------
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    const user = req.user as any;
+    const notifs = await storage.getNotifications(user.id);
+    res.json(notifs);
+  });
+
+  app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+    const user = req.user as any;
+    const count = await storage.getUnreadNotificationCount(user.id);
+    res.json({ count });
+  });
+
+  app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
+    await storage.markNotificationRead(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  app.patch("/api/notifications/read-all", requireAuth, async (req, res) => {
+    const user = req.user as any;
+    await storage.markAllNotificationsRead(user.id);
+    res.json({ ok: true });
   });
 
   // ---------- Products ----------
@@ -140,7 +226,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ---------- Orders ----------
   app.post(api.orders.create.path, requireAuth, async (req, res) => {
     const user = req.user as any;
-
     const { items, paymentMethod, paymentDetails } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Order must contain at least one item" });
@@ -157,11 +242,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const price = Number(product.price);
       totalAmount += price * item.quantity;
-      orderItemsData.push({
-        productId: item.productId,
-        quantity: item.quantity,
-        price: product.price,
-      });
+      orderItemsData.push({ productId: item.productId, quantity: item.quantity, price: product.price });
     }
 
     const order = await storage.createOrder({
@@ -172,7 +253,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       paymentDetails: typeof paymentDetails === "string" ? paymentDetails : JSON.stringify(paymentDetails || {}),
     }, orderItemsData);
 
-    // Decrement stock
     for (const item of items) {
       const product = await storage.getProduct(item.productId);
       if (product) {
@@ -180,7 +260,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    // Create shipment + first tracking log
     const trackingNumber = `GS-${Math.floor(Math.random() * 10000)}-${Date.now().toString().slice(-4)}`;
     const shipment = await storage.createShipment({
       orderId: order.id,
@@ -195,6 +274,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       location: "Origin Warehouse",
       note: "Order received, awaiting payment confirmation from our team.",
     });
+
+    // In-app notification for customer
+    await storage.createNotification({
+      userId: user.id,
+      type: "order_placed",
+      title: `Order #${order.id} Received`,
+      body: `Your order of $${totalAmount.toFixed(2)} is awaiting payment confirmation.`,
+      link: "/orders",
+      isRead: false,
+    });
+
+    // Email customer
+    const fullUser = await storage.getUser(user.id);
+    if (fullUser?.email) {
+      sendOrderConfirmationEmail(fullUser.email, fullUser.name, order.id, totalAmount.toFixed(2), paymentMethod || "crypto").catch(() => {});
+    }
+
+    // Notify all admins
+    const allUsers = await storage.getUsers();
+    const admins = allUsers.filter(u => u.role === "admin");
+    for (const admin of admins) {
+      await storage.createNotification({
+        userId: admin.id,
+        type: "new_order",
+        title: `New Order #${order.id}`,
+        body: `${fullUser?.name || "A customer"} placed an order for $${totalAmount.toFixed(2)}.`,
+        link: "/dashboard",
+        isRead: false,
+      });
+      if (admin.email) {
+        sendNewOrderAlertToAdmin(admin.email, order.id, fullUser?.name || "Customer", totalAmount.toFixed(2)).catch(() => {});
+      }
+    }
 
     res.status(201).json({ ...order, trackingNumber });
   });
@@ -223,10 +335,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const updated = await storage.updateOrderStatus(orderId, status);
-    if (!updated) return res.status(404).json({ message: "Order not found" });
+    const order = await storage.getOrder(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // Keep shipment + tracking log in sync with order status changes
+    const updated = await storage.updateOrderStatus(orderId, status);
+
     const shipment = await storage.getShipmentByOrderId(orderId);
     const shipmentStatus = ORDER_STATUS_TO_SHIPMENT_STATUS[status];
     if (shipment && shipmentStatus) {
@@ -236,6 +349,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         location: shipmentStatus === "delivered" ? "Destination" : "Distribution Center",
         note: `Order status updated to "${status.replace(/_/g, " ")}".`,
       });
+    }
+
+    // Notify the order owner
+    const statusLabel = status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+    await storage.createNotification({
+      userId: order.userId,
+      type: "order_status",
+      title: `Order #${orderId} Updated`,
+      body: `Your order status has been changed to: ${statusLabel}.`,
+      link: "/orders",
+      isRead: false,
+    });
+
+    const orderOwner = await storage.getUser(order.userId);
+    if (orderOwner?.email) {
+      sendOrderStatusEmail(orderOwner.email, orderOwner.name, orderId, status).catch(() => {});
     }
 
     res.json(updated);
@@ -256,6 +385,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const updated = await storage.updateUserRole(id, role);
     if (!updated) return res.status(404).json({ message: "User not found" });
     const { password, ...safe } = updated;
+
+    await storage.createNotification({
+      userId: id,
+      type: "account",
+      title: "Account Role Updated",
+      body: `Your account role has been changed to: ${role}.`,
+      isRead: false,
+    });
+
     res.json(safe);
   });
 
@@ -266,7 +404,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
-  // ---------- Tasks (internal ops board for admins) ----------
+  // ---------- Tasks ----------
   app.get("/api/tasks", requireAuth, async (req, res) => {
     const user = req.user as any;
     const tasks = user.role === "admin" ? await storage.getAllTasks() : await storage.getTasks(user.id);
@@ -304,11 +442,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const trackingNumber = req.params.trackingNumber;
     const shipment = await storage.getShipmentByTracking(trackingNumber);
     if (!shipment) return res.status(404).json({ message: "Shipment not found" });
-
-    const log = await storage.addTrackingLog({
-      shipmentId: shipment.id,
-      ...req.body,
-    });
+    const log = await storage.addTrackingLog({ shipmentId: shipment.id, ...req.body });
     res.status(201).json(log);
   });
 
@@ -328,6 +462,7 @@ async function seedData() {
     password: demoPassword,
     name: "Demo Admin",
     role: "admin",
+    email: "admin@temulite.com",
   } as any);
 
   const vendor1 = await storage.createUser({
@@ -335,6 +470,7 @@ async function seedData() {
     password: demoPassword,
     name: "Global Gadgets Co.",
     role: "vendor",
+    email: "vendor@temulite.com",
   } as any);
 
   const vendor2 = await storage.createUser({
@@ -342,6 +478,7 @@ async function seedData() {
     password: demoPassword,
     name: "Urban Style Trading",
     role: "vendor",
+    email: "vendor2@temulite.com",
   } as any);
 
   const customer = await storage.createUser({
@@ -349,6 +486,7 @@ async function seedData() {
     password: demoPassword,
     name: "Jamie Customer",
     role: "customer",
+    email: "customer@temulite.com",
   } as any);
 
   const catalog = [
@@ -358,26 +496,21 @@ async function seedData() {
     { vendorId: vendor1.id, name: "LED Strip Lights 16.4ft", description: "RGB LED lights with remote control, perfect for room and desk ambiance.", price: "9.99", stock: 620, imageUrl: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&auto=format&fit=crop&q=60", category: "Electronics" },
     { vendorId: vendor1.id, name: "Mini Bluetooth Speaker", description: "Compact speaker with rich bass and 12-hour playtime.", price: "12.99", stock: 275, imageUrl: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=600&auto=format&fit=crop&q=60", category: "Electronics" },
     { vendorId: vendor1.id, name: "USB-C Fast Charging Cable 3-Pack", description: "Durable braided cables compatible with most modern devices.", price: "7.99", stock: 800, imageUrl: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=600&auto=format&fit=crop&q=60", category: "Electronics" },
-
     { vendorId: vendor2.id, name: "Oversized Knit Sweater", description: "Cozy oversized sweater made from soft blended yarn, perfect for fall and winter.", price: "22.99", stock: 180, imageUrl: "https://images.unsplash.com/photo-1576871337622-98d48d1cf531?w=600&auto=format&fit=crop&q=60", category: "Fashion" },
     { vendorId: vendor2.id, name: "Running Shoes Unisex", description: "Comfortable running shoes with breathable mesh and cushioned sole for all terrains.", price: "29.99", stock: 260, imageUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=60", category: "Fashion" },
     { vendorId: vendor2.id, name: "Classic Denim Jacket", description: "Timeless denim jacket with a relaxed fit, great for layering.", price: "27.49", stock: 150, imageUrl: "https://images.unsplash.com/photo-1543076447-215ad9ba6923?w=600&auto=format&fit=crop&q=60", category: "Fashion" },
     { vendorId: vendor2.id, name: "Minimalist Analog Watch", description: "Elegant stainless steel watch with a leather strap.", price: "19.99", stock: 220, imageUrl: "https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=600&auto=format&fit=crop&q=60", category: "Fashion" },
     { vendorId: vendor2.id, name: "Canvas Tote Bag", description: "Durable everyday tote bag with inner pocket, great for shopping or the beach.", price: "8.99", stock: 400, imageUrl: "https://images.unsplash.com/photo-1544816155-12df9643f363?w=600&auto=format&fit=crop&q=60", category: "Fashion" },
-
     { vendorId: vendor1.id, name: "Ceramic Coffee Mug Set (4-Piece)", description: "Elegant ceramic mugs, microwave and dishwasher safe.", price: "16.99", stock: 190, imageUrl: "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=600&auto=format&fit=crop&q=60", category: "Home" },
     { vendorId: vendor1.id, name: "Aromatherapy Essential Oil Diffuser", description: "Ultrasonic diffuser with 7 LED color modes and auto shut-off.", price: "21.99", stock: 160, imageUrl: "https://images.unsplash.com/photo-1602928321679-560bb453f190?w=600&auto=format&fit=crop&q=60", category: "Home" },
     { vendorId: vendor1.id, name: "Non-Stick Frying Pan Set", description: "3-piece non-stick cookware set for everyday cooking.", price: "34.99", stock: 130, imageUrl: "https://images.unsplash.com/photo-1584990347449-a4b1c8c1de92?w=600&auto=format&fit=crop&q=60", category: "Home" },
     { vendorId: vendor2.id, name: "Memory Foam Pillow", description: "Ergonomic contour pillow for neck and shoulder support.", price: "13.99", stock: 300, imageUrl: "https://images.unsplash.com/photo-1584100936595-c0654b55a2e6?w=600&auto=format&fit=crop&q=60", category: "Home" },
-
     { vendorId: vendor2.id, name: "Hydrating Face Serum", description: "Vitamin C serum for brightening and hydrating skin.", price: "14.99", stock: 350, imageUrl: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&auto=format&fit=crop&q=60", category: "Beauty" },
     { vendorId: vendor2.id, name: "Makeup Brush Set (12-Piece)", description: "Professional makeup brushes with synthetic bristles and travel case.", price: "17.99", stock: 240, imageUrl: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&auto=format&fit=crop&q=60", category: "Beauty" },
     { vendorId: vendor2.id, name: "Electric Facial Cleansing Brush", description: "Silicone facial cleansing device for deep pore cleaning.", price: "19.99", stock: 200, imageUrl: "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&auto=format&fit=crop&q=60", category: "Beauty" },
-
     { vendorId: vendor1.id, name: "Adjustable Dumbbell Set", description: "Space-saving adjustable dumbbells, 5-25lbs per hand.", price: "39.99", stock: 90, imageUrl: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&auto=format&fit=crop&q=60", category: "Sports" },
     { vendorId: vendor1.id, name: "Yoga Mat with Carry Strap", description: "Extra thick non-slip yoga mat, eco-friendly TPE material.", price: "11.99", stock: 320, imageUrl: "https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=600&auto=format&fit=crop&q=60", category: "Sports" },
     { vendorId: vendor1.id, name: "Resistance Bands Set", description: "5 resistance levels for strength training and rehab.", price: "9.49", stock: 400, imageUrl: "https://images.unsplash.com/photo-1517344884509-a0c97ec11bcc?w=600&auto=format&fit=crop&q=60", category: "Sports" },
-
     { vendorId: vendor2.id, name: "Building Blocks Set (500pcs)", description: "Creative building block set compatible with major brands, great for kids.", price: "23.99", stock: 170, imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d746b?w=600&auto=format&fit=crop&q=60", category: "Toys" },
     { vendorId: vendor2.id, name: "Remote Control Race Car", description: "High-speed RC car with rechargeable battery, ages 6+.", price: "26.99", stock: 140, imageUrl: "https://images.unsplash.com/photo-1594787318286-3d835c1d207f?w=600&auto=format&fit=crop&q=60", category: "Toys" },
   ];
@@ -429,42 +562,39 @@ async function seedData() {
     });
 
     if (shipmentStatus === "in_transit" || shipmentStatus === "delivered") {
-      await storage.addTrackingLog({
-        shipmentId: shipment.id,
-        status: "shipped",
-        location: "Regional Distribution Center",
-        note: "Package has left the warehouse.",
-      });
-      await storage.addTrackingLog({
-        shipmentId: shipment.id,
-        status: "in_transit",
-        location: "Transit Hub",
-        note: "Package is on its way to the destination.",
-      });
+      await storage.addTrackingLog({ shipmentId: shipment.id, status: "shipped", location: "Regional Distribution Center", note: "Package has left the warehouse." });
+      await storage.addTrackingLog({ shipmentId: shipment.id, status: "in_transit", location: "Transit Hub", note: "Package is on its way to the destination." });
     }
     if (shipmentStatus === "delivered") {
-      await storage.addTrackingLog({
-        shipmentId: shipment.id,
-        status: "delivered",
-        location: "Customer Address",
-        note: "Package has been delivered.",
-      });
+      await storage.addTrackingLog({ shipmentId: shipment.id, status: "delivered", location: "Customer Address", note: "Package has been delivered." });
     }
   }
 
+  // Seed welcome notifications for demo accounts
+  await storage.createNotification({
+    userId: customer.id, type: "account", title: "Welcome to Temu Lite!",
+    body: "Your account is ready. Start shopping and track your orders here.", link: "/orders", isRead: false,
+  });
+  await storage.createNotification({
+    userId: customer.id, type: "order_status", title: "Order #1 Status: Paid",
+    body: "Your payment has been confirmed. Your order is being prepared.", link: "/orders", isRead: false,
+  });
+  await storage.createNotification({
+    userId: vendor1.id, type: "account", title: "Welcome, Vendor!",
+    body: "Your vendor store is live. Manage your products from the dashboard.", link: "/vendor", isRead: false,
+  });
+  await storage.createNotification({
+    userId: admin.id, type: "account", title: "Platform Ready",
+    body: "Temu Lite is live. Monitor orders, vendors, and users from your dashboard.", link: "/dashboard", isRead: false,
+  });
+
   await storage.createTask({
-    userId: admin.id,
-    title: "Verify pending crypto payments",
-    description: "Review awaiting_confirmation orders and confirm valid transactions.",
-    status: "todo",
-    priority: "high",
+    userId: admin.id, title: "Verify pending crypto payments",
+    description: "Review awaiting_confirmation orders and confirm valid transactions.", status: "todo", priority: "high",
   } as any);
 
   await storage.createTask({
-    userId: admin.id,
-    title: "Onboard new vendor: Urban Style Trading",
-    description: "Confirm catalog listings meet quality guidelines.",
-    status: "completed",
-    priority: "medium",
+    userId: admin.id, title: "Onboard new vendor: Urban Style Trading",
+    description: "Confirm catalog listings meet quality guidelines.", status: "completed", priority: "medium",
   } as any);
 }

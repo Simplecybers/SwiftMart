@@ -1,8 +1,8 @@
 import { 
   User, InsertUser, Product, InsertProduct, Order, InsertOrder, 
   OrderItem, InsertOrderItem, Shipment, InsertShipment, TrackingLog, 
-  InsertTrackingLog, Task, InsertTask,
-  users, products, orders, orderItems, shipments, trackingLogs, tasks
+  InsertTrackingLog, Task, InsertTask, Notification, InsertNotification,
+  users, products, orders, orderItems, shipments, trackingLogs, tasks, notifications
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, inArray, or, ilike, and } from "drizzle-orm";
@@ -15,7 +15,9 @@ const PostgresSessionStore = connectPg(session);
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, data: Partial<Pick<User, "name" | "email" | "phone" | "bio" | "avatarUrl">>): Promise<User | undefined>;
   deleteUser(id: number): Promise<boolean>;
 
   getProducts(category?: string, search?: string): Promise<Product[]>;
@@ -45,6 +47,12 @@ export interface IStorage {
   getUsers(): Promise<User[]>;
   updateUserRole(id: number, role: string): Promise<User | undefined>;
 
+  getNotifications(userId: number): Promise<Notification[]>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: number): Promise<void>;
+  markAllNotificationsRead(userId: number): Promise<void>;
+  getUnreadNotificationCount(userId: number): Promise<number>;
+
   sessionStore: session.Store;
 }
 
@@ -68,9 +76,19 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
   async createUser(user: InsertUser): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+
+  async updateUser(id: number, data: Partial<Pick<User, "name" | "email" | "phone" | "bio" | "avatarUrl">>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return updated;
   }
 
   async deleteUser(id: number): Promise<boolean> {
@@ -92,7 +110,6 @@ export class DatabaseStorage implements IStorage {
         )
       );
     }
-
     if (conditions.length > 0) {
       return await db.select().from(products).where(and(...conditions)).orderBy(desc(products.id));
     }
@@ -126,13 +143,11 @@ export class DatabaseStorage implements IStorage {
   async createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
     return await db.transaction(async (tx) => {
       const [newOrder] = await tx.insert(orders).values(order).returning();
-      
       if (items.length > 0) {
         await tx.insert(orderItems).values(
           items.map(item => ({ ...item, orderId: newOrder.id }))
         );
       }
-      
       return newOrder;
     });
   }
@@ -141,19 +156,15 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     let userOrders;
     
-    if (user?.role === 'admin') {
+    if (user?.role === "admin") {
       userOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
-    } else if (user?.role === 'vendor') {
+    } else if (user?.role === "vendor") {
       const vendorProducts = await db.select().from(products).where(eq(products.vendorId, userId));
       const vendorProductIds = vendorProducts.map(p => p.id);
-      
       if (vendorProductIds.length === 0) return [];
-      
       const vendorOrderItems = await db.select().from(orderItems).where(inArray(orderItems.productId, vendorProductIds));
       const orderIds = [...new Set(vendorOrderItems.map(oi => oi.orderId))];
-      
       if (orderIds.length === 0) return [];
-      
       userOrders = await db.select().from(orders).where(inArray(orders.id, orderIds)).orderBy(desc(orders.createdAt));
     } else {
       userOrders = await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
@@ -171,10 +182,8 @@ export class DatabaseStorage implements IStorage {
   async getOrder(id: number): Promise<(Order & { items: OrderItem[], shipment?: Shipment }) | undefined> {
     const [order] = await db.select().from(orders).where(eq(orders.id, id));
     if (!order) return undefined;
-
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
     const [shipment] = await db.select().from(shipments).where(eq(shipments.orderId, id));
-
     return { ...order, items, shipment };
   }
 
@@ -191,9 +200,7 @@ export class DatabaseStorage implements IStorage {
   async getShipmentByTracking(trackingNumber: string): Promise<(Shipment & { logs: TrackingLog[] }) | undefined> {
     const [shipment] = await db.select().from(shipments).where(eq(shipments.trackingNumber, trackingNumber));
     if (!shipment) return undefined;
-
     const logs = await db.select().from(trackingLogs).where(eq(trackingLogs.shipmentId, shipment.id)).orderBy(desc(trackingLogs.timestamp));
-    
     return { ...shipment, logs };
   }
 
@@ -204,9 +211,7 @@ export class DatabaseStorage implements IStorage {
 
   async addTrackingLog(log: InsertTrackingLog): Promise<TrackingLog> {
     const [newLog] = await db.insert(trackingLogs).values(log).returning();
-    await db.update(shipments)
-      .set({ status: log.status })
-      .where(eq(shipments.id, log.shipmentId));
+    await db.update(shipments).set({ status: log.status }).where(eq(shipments.id, log.shipmentId));
     return newLog;
   }
 
@@ -245,6 +250,31 @@ export class DatabaseStorage implements IStorage {
   async updateUserRole(id: number, role: string): Promise<User | undefined> {
     const [updated] = await db.update(users).set({ role: role as any }).where(eq(users.id, id)).returning();
     return updated;
+  }
+
+  async getNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotif] = await db.insert(notifications).values(notification).returning();
+    return newNotif;
+  }
+
+  async markNotificationRead(id: number): Promise<void> {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsRead(userId: number): Promise<void> {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.userId, userId));
+  }
+
+  async getUnreadNotificationCount(userId: number): Promise<number> {
+    const result = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return result.length;
   }
 }
 
